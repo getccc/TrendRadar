@@ -87,6 +87,11 @@ platforms:
 # 每个源配置：id(唯一标识)、name(显示名称)、url(订阅地址)
 # enabled: 可选，默认 true
 # max_age_days: 可选，覆盖全局 freshness_filter.max_age_days
+# type: 可选，行业分组（如 crypto / ai / robotics）
+# source_kind: 可选，源类型（kol | media），默认 media
+# weight: 可选，源权重，默认 1
+# tags: 可选，源标签数组，供 AI 聚合理解上下文
+# lang_hint: 可选，弱语言提示；不填时系统按单条内容自动识别语言
 # ===============================================================
 rss:
   enabled: true                       # 是否启用 RSS 抓取
@@ -126,6 +131,23 @@ rss:
     - id: "yahoo-finance"
       name: "雅虎财经"
       url: "https://finance.yahoo.com/news/rssindex"
+
+    # 加密行业示例（推荐给 KOL / 媒体源标记 type 与 source_kind）
+    # - id: "blockbeats"
+    #   name: "律动 BlockBeats"
+    #   url: "https://example.com/rss"
+    #   type: "crypto"
+    #   source_kind: "media"
+    #   weight: 3
+    #   tags: ["news", "exchange", "policy"]
+
+    # - id: "crypto-kol-a"
+    #   name: "某加密 KOL"
+    #   url: "https://rsshub.example.com/twitter/user/xxx"
+    #   type: "crypto"
+    #   source_kind: "kol"
+    #   weight: 2
+    #   tags: ["trading", "meme"]
 
     # 自定义源示例
     # - id: "custom-feed"
@@ -234,6 +256,51 @@ ai_filter:
 
 
 # ===============================================================
+# 4.7 行业专项分析（基于 RSS type 聚合）
+#
+# 用途：把同一行业 type 下的 RSS 源（如 crypto）聚合后做一份中文专项简报
+# 适合场景：加密货币 / AI / 半导体 / 机器人等行业跟踪
+#
+# 核心思路：
+# 1) 先在 rss.feeds 下给源标记 type
+# 2) 再在这里为该 type 配置专项分析规则
+# 3) AI 会统一汇总同一 type 下的 KOL / 媒体内容，并中文输出
+# ===============================================================
+industry_analysis:
+  enabled: false
+  output_language: "zh-CN"
+
+  groups:
+    - type: "crypto"
+      enabled: false
+      display_name: "加密货币行业"
+      include_in_notification: true
+      include_in_html: true
+      source_kinds: ["kol", "media"]
+
+      dedup:
+        enabled: true
+        similarity_threshold: 0.82
+
+      freshness:
+        enabled: true
+        hours: 24
+
+      focus:
+        consensus_detection: true
+        fresh_signal_detection: true
+        kol_media_divergence: true
+
+      ai:
+        enabled: true
+        prompt_file: "industry_analysis_prompt.txt"
+        mode: "group"
+        max_items: 80
+        max_kol_items: 50
+        max_media_items: 30
+
+
+# ===============================================================
 # 5. 推送内容控制
 #
 # 统一管理推送消息中显示哪些区域及其排列顺序
@@ -256,6 +323,7 @@ display:
     - rss                                 # 3️⃣ RSS 订阅区域
     - standalone                          # 4️⃣ 独立展示区
     - ai_analysis                         # 5️⃣ AI 分析区域
+    - industry_analysis                   # 6️⃣ 行业专项分析区域
 
   # 推送区域开关
   # 控制各区域是否启用（配合 region_order 使用）
@@ -270,6 +338,7 @@ display:
 
     standalone: false                 # 独立展示区（完整热榜/RSS，不受关键词过滤）
     ai_analysis: true                 # AI 分析区域
+    industry_analysis: true           # 行业专项分析区域（基于 rss.feeds[].type 聚合）
 
   # 📋 独立展示区配置
   # 用途：将指定平台的完整热榜/RSS 数据独立提取，不受关键词过滤影响

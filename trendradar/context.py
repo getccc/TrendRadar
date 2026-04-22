@@ -40,6 +40,7 @@ from trendradar.notification import (
 )
 from trendradar.ai import AITranslator
 from trendradar.ai.filter import AIFilter, AIFilterResult
+from trendradar.industry import IndustryAnalyzer, IndustryAnalysisResult
 from trendradar.storage import get_storage_manager
 
 
@@ -318,6 +319,7 @@ class AppContext:
         rss_items: Optional[List[Dict]] = None,
         rss_new_items: Optional[List[Dict]] = None,
         ai_analysis: Optional[Any] = None,
+        industry_analysis: Optional[Any] = None,
         standalone_data: Optional[Dict] = None,
         frequency_file: Optional[str] = None,
     ) -> str:
@@ -334,7 +336,7 @@ class AppContext:
             output_dir="output",
             date_folder=self.format_date(),
             time_filename=self.format_time(),
-            render_html_func=lambda *args, **kwargs: self.render_html(*args, rss_items=rss_items, rss_new_items=rss_new_items, ai_analysis=ai_analysis, standalone_data=standalone_data, **kwargs),
+            render_html_func=lambda *args, **kwargs: self.render_html(*args, rss_items=rss_items, rss_new_items=rss_new_items, ai_analysis=ai_analysis, industry_analysis=industry_analysis, standalone_data=standalone_data, **kwargs),
             matches_word_groups_func=self.matches_word_groups,
             load_frequency_words_func=lambda: self.load_frequency_words(frequency_file),
         )
@@ -348,6 +350,7 @@ class AppContext:
         rss_items: Optional[List[Dict]] = None,
         rss_new_items: Optional[List[Dict]] = None,
         ai_analysis: Optional[Any] = None,
+        industry_analysis: Optional[Any] = None,
         standalone_data: Optional[Dict] = None,
     ) -> str:
         """渲染HTML内容"""
@@ -362,6 +365,7 @@ class AppContext:
             rss_new_items=rss_new_items,
             display_mode=self.display_mode,
             ai_analysis=ai_analysis,
+            industry_analysis=industry_analysis,
             show_new_section=self.show_new_section,
             standalone_data=standalone_data,
         )
@@ -411,6 +415,7 @@ class AppContext:
         rss_items: Optional[list] = None,
         rss_new_items: Optional[list] = None,
         ai_content: Optional[str] = None,
+        industry_content: Optional[str] = None,
         standalone_data: Optional[Dict] = None,
         ai_stats: Optional[Dict] = None,
         report_type: str = "热点分析报告",
@@ -452,6 +457,7 @@ class AppContext:
             timezone=self.config.get("TIMEZONE", DEFAULT_TIMEZONE),
             display_mode=self.display_mode,
             ai_content=ai_content,
+            industry_content=industry_content,
             standalone_data=standalone_data,
             rank_threshold=self.rank_threshold,
             ai_stats=ai_stats,
@@ -475,6 +481,15 @@ class AppContext:
             get_time_func=self.get_time,
             split_content_func=self.split_content,
             translator=translator,
+        )
+
+    def create_industry_analyzer(self) -> IndustryAnalyzer:
+        """创建行业专项分析器"""
+        return IndustryAnalyzer(
+            ai_config=self.config.get("AI", {}),
+            industry_config=self.config.get("INDUSTRY_ANALYSIS", {}),
+            get_time_func=self.get_time,
+            debug=self.config.get("DEBUG", False),
         )
 
     def create_scheduler(self) -> Scheduler:
@@ -691,6 +706,8 @@ class AppContext:
         pending_news = [n for n in all_news if n["id"] not in analyzed_hotlist]
 
         # RSS（先做新鲜度过滤，再去除已分类的）
+        all_rss = []
+        analyzed_rss = []
         pending_rss = []
         freshness_filtered_rss = 0
         if self.rss_enabled:

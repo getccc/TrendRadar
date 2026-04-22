@@ -79,6 +79,12 @@ class RSSItem:
     summary: str = ""                   # 摘要/描述
     author: str = ""                    # 作者
     crawl_time: str = ""                # 抓取时间（HH:MM 格式）
+    feed_type: str = ""                 # RSS 源行业类型（如 crypto）
+    source_kind: str = "media"          # 源类型（kol/media）
+    weight: int = 1                      # 源权重
+    tags: List[str] = field(default_factory=list)  # 源标签
+    lang_hint: str = ""                 # 配置层语言提示（可选）
+    lang_detected: str = "unknown"      # 自动识别语言
 
     # 统计信息
     first_time: str = ""                # 首次抓取时间
@@ -96,6 +102,12 @@ class RSSItem:
             "summary": self.summary,
             "author": self.author,
             "crawl_time": self.crawl_time,
+            "feed_type": self.feed_type,
+            "source_kind": self.source_kind,
+            "weight": self.weight,
+            "tags": self.tags,
+            "lang_hint": self.lang_hint,
+            "lang_detected": self.lang_detected,
             "first_time": self.first_time,
             "last_time": self.last_time,
             "count": self.count,
@@ -113,6 +125,12 @@ class RSSItem:
             summary=data.get("summary", ""),
             author=data.get("author", ""),
             crawl_time=data.get("crawl_time", ""),
+            feed_type=data.get("feed_type", ""),
+            source_kind=data.get("source_kind", "media"),
+            weight=int(data.get("weight", 1) or 1),
+            tags=data.get("tags", []) or [],
+            lang_hint=data.get("lang_hint", ""),
+            lang_detected=data.get("lang_detected", "unknown"),
             first_time=data.get("first_time", ""),
             last_time=data.get("last_time", ""),
             count=data.get("count", 1),

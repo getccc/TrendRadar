@@ -26,6 +26,11 @@ class RSSFeedConfig:
     max_items: int = 0          # 最大条目数（0=不限制）
     enabled: bool = True        # 是否启用
     max_age_days: Optional[int] = None  # 文章最大年龄（天），覆盖全局设置；None=使用全局，0=禁用过滤
+    feed_type: str = ""        # 行业类型（如 crypto）
+    source_kind: str = "media"  # 源类型（kol/media）
+    weight: int = 1             # 源权重
+    tags: Optional[List[str]] = None      # 源标签
+    lang_hint: str = ""        # 语言提示（可选）
 
 
 class RSSFetcher:
@@ -126,6 +131,24 @@ class RSSFetcher:
         filtered_count = len(items) - len(filtered)
         return filtered, filtered_count
 
+    @staticmethod
+    def _detect_language(title: str, summary: str = "") -> str:
+        """轻量语言识别：zh / en / mixed / unknown"""
+        text = f"{title or ''} {summary or ''}".strip()
+        if not text:
+            return "unknown"
+
+        zh_count = sum(1 for ch in text if '\u4e00' <= ch <= '\u9fff')
+        en_count = sum(1 for ch in text if ('a' <= ch.lower() <= 'z'))
+
+        if zh_count > 0 and en_count > 0:
+            return "mixed"
+        if zh_count > 0:
+            return "zh"
+        if en_count > 0:
+            return "en"
+        return "unknown"
+
     def fetch_feed(self, feed: RSSFeedConfig) -> Tuple[List[RSSItem], Optional[str]]:
         """
         抓取单个 RSS 源
@@ -161,6 +184,12 @@ class RSSFetcher:
                     summary=parsed.summary or "",
                     author=parsed.author or "",
                     crawl_time=crawl_time,
+                    feed_type=feed.feed_type,
+                    source_kind=feed.source_kind,
+                    weight=feed.weight,
+                    tags=feed.tags or [],
+                    lang_hint=feed.lang_hint,
+                    lang_detected=self._detect_language(parsed.title, parsed.summary or ""),
                     first_time=crawl_time,
                     last_time=crawl_time,
                     count=1,
@@ -288,6 +317,11 @@ class RSSFetcher:
                 max_items=feed_config.get("max_items", 0),  # 0=不限制
                 enabled=feed_config.get("enabled", True),
                 max_age_days=max_age_days,  # None=使用全局，0=禁用，>0=覆盖
+                feed_type=str(feed_config.get("type", "") or "").strip(),
+                source_kind=str(feed_config.get("source_kind", "media") or "media").strip() or "media",
+                weight=int(feed_config.get("weight", 1) or 1),
+                tags=feed_config.get("tags", []) or [],
+                lang_hint=str(feed_config.get("lang_hint", "") or "").strip(),
             )
             if feed.id and feed.url:
                 feeds.append(feed)

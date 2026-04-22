@@ -27,6 +27,7 @@ from trendradar.crawler import DataFetcher
 from trendradar.storage import convert_crawl_results_to_news_data
 from trendradar.utils.time import DEFAULT_TIMEZONE, is_within_days, calculate_days_old
 from trendradar.ai import AIAnalyzer, AIAnalysisResult
+from trendradar.industry import IndustryAnalysisResult
 from trendradar.core.scheduler import ResolvedSchedule
 
 
@@ -462,7 +463,7 @@ class NewsAnalyzer:
         report_type: str,
         id_to_name: Optional[Dict],
         current_results: Optional[Dict] = None,
-        schedule: ResolvedSchedule = None,
+        schedule: Optional[ResolvedSchedule] = None,
         standalone_data: Optional[Dict] = None,
     ) -> Optional[AIAnalysisResult]:
         """执行 AI 分析"""
@@ -471,7 +472,7 @@ class NewsAnalyzer:
             return None
 
         # 调度系统决策
-        if not schedule.analyze:
+        if not schedule or not schedule.analyze:
             print("[AI] 调度器: 当前时间段不执行 AI 分析")
             return None
 
@@ -584,10 +585,26 @@ class NewsAnalyzer:
             traceback.print_exc(file=sys.stderr)
             return AIAnalysisResult(success=False, error=f"{error_type}: {error_msg}")
 
+    def _run_industry_analysis(
+        self,
+        rss_items: Optional[List[Dict]],
+    ) -> List[IndustryAnalysisResult]:
+        """执行 RSS 行业专项分析。"""
+        industry_config = self.ctx.config.get("INDUSTRY_ANALYSIS", {})
+        if not industry_config.get("ENABLED", False) or not rss_items:
+            return []
+
+        analyzer = self.ctx.create_industry_analyzer()
+        results = analyzer.analyze(rss_items)
+        successful = sum(1 for item in results if item.success)
+        skipped = sum(1 for item in results if item.skipped)
+        print(f"[Industry] 分析完成: 成功 {successful} 个分组, 跳过 {skipped} 个分组")
+        return results
+
     def _load_analysis_data(
         self,
         quiet: bool = False,
-    ) -> Optional[Tuple[Dict, Dict, Dict, Dict, List, List]]:
+    ) -> Optional[Tuple[Dict, Dict, Dict, Dict, List, List, List]]:
         """统一的数据加载和预处理，使用当前监控平台列表过滤历史数据"""
         try:
             # 获取当前配置的监控平台ID列表
@@ -808,9 +825,9 @@ class NewsAnalyzer:
         rss_items: Optional[List[Dict]] = None,
         rss_new_items: Optional[List[Dict]] = None,
         standalone_data: Optional[Dict] = None,
-        schedule: ResolvedSchedule = None,
+        schedule: Optional[ResolvedSchedule] = None,
         rss_new_urls: Optional[set] = None,
-    ) -> Tuple[List[Dict], Optional[str], Optional[AIAnalysisResult], Optional[List[Dict]]]:
+    ) -> Tuple[List[Dict], Optional[str], Optional[AIAnalysisResult], Optional[List[Dict]], List[IndustryAnalysisResult]]:
         """统一的分析流水线：数据处理 → 统计计算（关键词/AI筛选）→ AI分析 → HTML生成"""
 
         # 根据筛选策略选择数据处理方式
@@ -858,6 +875,7 @@ class NewsAnalyzer:
 
         # AI 分析（如果启用，用于 HTML 报告）
         ai_result = None
+        industry_results: List[IndustryAnalysisResult] = []
         ai_config = self.ctx.config.get("AI_ANALYSIS", {})
         if ai_config.get("ENABLED", False) and stats:
             # 获取模式策略来确定报告类型
@@ -873,7 +891,7 @@ class NewsAnalyzer:
         # 注意：仅翻译 rss_items 和 rss_new_items，不翻译 standalone_data（通知前会重新生成）
         # 热榜翻译在推送时由 dispatch_all 处理 report_data
         trans_config = self.ctx.config.get("AI_TRANSLATION", {})
-        if trans_config.get("ENABLED", False):
+        if rss_items and trans_config.get("ENABLED", False):
             dispatcher = self.ctx.create_notification_dispatcher()
             display_regions = self.ctx.config.get("DISPLAY", {}).get("REGIONS", {})
             _, rss_items, rss_new_items, _ = \
@@ -883,6 +901,9 @@ class NewsAnalyzer:
                     rss_new_items=rss_new_items,
                     display_regions=display_regions,
                 )
+
+        if rss_items:
+            industry_results = self._run_industry_analysis(rss_items)
 
         # HTML生成（如果启用）— 使用翻译后的数据
         html_file = None
@@ -898,11 +919,12 @@ class NewsAnalyzer:
                 rss_items=rss_items,
                 rss_new_items=rss_new_items,
                 ai_analysis=ai_result,
+                industry_analysis=industry_results,
                 standalone_data=standalone_data,
                 frequency_file=self.frequency_file,
             )
 
-        return stats, html_file, ai_result, rss_items
+        return stats, html_file, ai_result, rss_items, industry_results
 
     def _send_notification_if_needed(
         self,
@@ -917,8 +939,9 @@ class NewsAnalyzer:
         rss_new_items: Optional[List[Dict]] = None,
         standalone_data: Optional[Dict] = None,
         ai_result: Optional[AIAnalysisResult] = None,
+        industry_results: Optional[List[IndustryAnalysisResult]] = None,
         current_results: Optional[Dict] = None,
-        schedule: ResolvedSchedule = None,
+        schedule: Optional[ResolvedSchedule] = None,
     ) -> bool:
         """统一的通知发送逻辑，包含所有判断条件，支持热榜+RSS合并推送+AI分析+独立展示区"""
         has_notification = self._has_notification_configured()
@@ -932,6 +955,9 @@ class NewsAnalyzer:
         # 计算热榜匹配条数
         news_count = sum(len(stat.get("titles", [])) for stat in stats) if stats else 0
         rss_count = sum(stat.get("count", 0) for stat in rss_items) if rss_items else 0
+
+        if not schedule:
+            return False
 
         if (
             cfg["ENABLE_NOTIFICATION"]
@@ -989,6 +1015,7 @@ class NewsAnalyzer:
                 rss_items=rss_items,
                 rss_new_items=rss_new_items,
                 ai_analysis=ai_result,
+                industry_analysis=industry_results,
                 standalone_data=standalone_data,
                 skip_translation=True,
             )
@@ -1453,7 +1480,7 @@ class NewsAnalyzer:
             pass
         return rss_items
 
-    def _generate_rss_html_report(self, rss_items: list, feeds_info: dict) -> str:
+    def _generate_rss_html_report(self, rss_items: list, feeds_info: dict) -> Optional[str]:
         """生成 RSS HTML 报告"""
         try:
             from trendradar.report.rss_html import render_rss_html_content
@@ -1532,6 +1559,7 @@ class NewsAnalyzer:
         html_file = None
         stats = []
         ai_result = None
+        industry_results: List[IndustryAnalysisResult] = []
         title_info = None
 
         # current 模式需要使用完整的历史数据
@@ -1557,7 +1585,7 @@ class NewsAnalyzer:
                     all_results, historical_id_to_name, historical_title_info, raw_rss_items
                 )
 
-                stats, html_file, ai_result, rss_items = self._run_analysis_pipeline(
+                stats, html_file, ai_result, rss_items, industry_results = self._run_analysis_pipeline(
                     all_results,
                     self.report_mode,
                     historical_title_info,
@@ -1601,7 +1629,7 @@ class NewsAnalyzer:
                     all_results, historical_id_to_name, historical_title_info, raw_rss_items
                 )
 
-                stats, html_file, ai_result, rss_items = self._run_analysis_pipeline(
+                stats, html_file, ai_result, rss_items, industry_results = self._run_analysis_pipeline(
                     all_results,
                     self.report_mode,
                     historical_title_info,
@@ -1629,7 +1657,7 @@ class NewsAnalyzer:
                 standalone_data = self._prepare_standalone_data(
                     results, id_to_name, title_info, raw_rss_items
                 )
-                stats, html_file, ai_result, rss_items = self._run_analysis_pipeline(
+                stats, html_file, ai_result, rss_items, industry_results = self._run_analysis_pipeline(
                     results,
                     self.report_mode,
                     title_info,
@@ -1651,7 +1679,7 @@ class NewsAnalyzer:
             standalone_data = self._prepare_standalone_data(
                 results, id_to_name, title_info, raw_rss_items
             )
-            stats, html_file, ai_result, rss_items = self._run_analysis_pipeline(
+            stats, html_file, ai_result, rss_items, industry_results = self._run_analysis_pipeline(
                 results,
                 self.report_mode,
                 title_info,
@@ -1689,6 +1717,7 @@ class NewsAnalyzer:
                 rss_new_items=rss_new_items,
                 standalone_data=standalone_data,
                 ai_result=ai_result,
+                industry_results=industry_results,
                 current_results=results,
                 schedule=schedule,
             )

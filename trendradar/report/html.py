@@ -26,6 +26,7 @@ def render_html_content(
     display_mode: str = "keyword",
     standalone_data: Optional[Dict] = None,
     ai_analysis: Optional[Any] = None,
+    industry_analysis: Optional[Any] = None,
     show_new_section: bool = True,
 ) -> str:
     """渲染HTML内容
@@ -48,7 +49,7 @@ def render_html_content(
         渲染后的 HTML 字符串
     """
     # 默认区域顺序
-    default_region_order = ["hotlist", "rss", "new_items", "standalone", "ai_analysis"]
+    default_region_order = ["hotlist", "rss", "new_items", "standalone", "ai_analysis", "industry_analysis"]
     if region_order is None:
         region_order = default_region_order
 
@@ -1882,6 +1883,8 @@ def render_html_content(
 
     # 生成 AI 分析 HTML
     ai_html = render_ai_analysis_html_rich(ai_analysis) if ai_analysis else ""
+    from trendradar.ai.formatter import render_industry_analysis_html_rich
+    industry_html = render_industry_analysis_html_rich(industry_analysis) if industry_analysis else ""
 
     # 准备各区域内容映射
     region_contents = {
@@ -1890,6 +1893,7 @@ def render_html_content(
         "new_items": (new_titles_html, rss_new_html),  # 元组，分别处理
         "standalone": standalone_html,
         "ai_analysis": ai_html,
+        "industry_analysis": industry_html,
     }
 
     def add_section_divider(content: str) -> str:

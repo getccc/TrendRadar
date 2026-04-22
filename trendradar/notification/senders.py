@@ -46,6 +46,24 @@ def _render_ai_analysis(ai_analysis: Any, channel: str) -> str:
         return ""
 
 
+def _render_industry_analysis(industry_analysis: Any, channel: str) -> str:
+    """渲染行业专项分析内容为指定渠道格式"""
+    if not industry_analysis:
+        return ""
+
+    try:
+        from trendradar.ai.formatter import (
+            render_industry_analysis_markdown,
+            render_industry_analysis_plain,
+        )
+
+        if channel in ("bark",):
+            return render_industry_analysis_plain(industry_analysis)
+        return render_industry_analysis_markdown(industry_analysis)
+    except ImportError:
+        return ""
+
+
 # === SMTP 邮件配置 ===
 SMTP_CONFIGS = {
     # Gmail（使用 STARTTLS）
@@ -85,11 +103,12 @@ def send_to_feishu(
     *,
     batch_size: int = 29000,
     batch_interval: float = 1.0,
-    split_content_func: Callable = None,
-    get_time_func: Callable = None,
+    split_content_func: Optional[Callable] = None,
+    get_time_func: Optional[Callable] = None,
     rss_items: Optional[list] = None,
     rss_new_items: Optional[list] = None,
     ai_analysis: Any = None,
+    industry_analysis: Any = None,
     display_regions: Optional[Dict] = None,
     standalone_data: Optional[Dict] = None,
 ) -> bool:
@@ -114,6 +133,9 @@ def send_to_feishu(
     Returns:
         bool: 发送是否成功
     """
+    if split_content_func is None:
+        raise ValueError("split_content_func is required")
+
     headers = {"Content-Type": "application/json"}
     proxies = None
     if proxy_url:
@@ -124,6 +146,7 @@ def send_to_feishu(
 
     # 渲染 AI 分析内容（如果有）
     ai_content = None
+    industry_content = None
     ai_stats = None
     if ai_analysis:
         ai_content = _render_ai_analysis(ai_analysis, "feishu")
@@ -137,6 +160,8 @@ def send_to_feishu(
                 "rss_count": getattr(ai_analysis, "rss_count", 0),
                 "ai_mode": getattr(ai_analysis, "ai_mode", ""),
             }
+    if industry_analysis:
+        industry_content = _render_industry_analysis(industry_analysis, "feishu")
 
     # 预留批次头部空间，避免添加头部后超限
     header_reserve = get_max_batch_header_size("feishu")
@@ -149,6 +174,7 @@ def send_to_feishu(
         rss_items=rss_items,
         rss_new_items=rss_new_items,
         ai_content=ai_content,
+        industry_content=industry_content,
         standalone_data=standalone_data,
         ai_stats=ai_stats,
         report_type=report_type,
@@ -231,10 +257,11 @@ def send_to_dingtalk(
     *,
     batch_size: int = 20000,
     batch_interval: float = 1.0,
-    split_content_func: Callable = None,
+    split_content_func: Optional[Callable] = None,
     rss_items: Optional[list] = None,
     rss_new_items: Optional[list] = None,
     ai_analysis: Any = None,
+    industry_analysis: Any = None,
     display_regions: Optional[Dict] = None,
     standalone_data: Optional[Dict] = None,
 ) -> bool:
@@ -258,6 +285,9 @@ def send_to_dingtalk(
     Returns:
         bool: 发送是否成功
     """
+    if split_content_func is None:
+        raise ValueError("split_content_func is required")
+
     headers = {"Content-Type": "application/json"}
     proxies = None
     if proxy_url:
@@ -268,6 +298,7 @@ def send_to_dingtalk(
 
     # 渲染 AI 分析内容（如果有）
     ai_content = None
+    industry_content = None
     ai_stats = None
     if ai_analysis:
         ai_content = _render_ai_analysis(ai_analysis, "dingtalk")
@@ -281,6 +312,8 @@ def send_to_dingtalk(
                 "rss_count": getattr(ai_analysis, "rss_count", 0),
                 "ai_mode": getattr(ai_analysis, "ai_mode", ""),
             }
+    if industry_analysis:
+        industry_content = _render_industry_analysis(industry_analysis, "dingtalk")
 
     # 预留批次头部空间，避免添加头部后超限
     header_reserve = get_max_batch_header_size("dingtalk")
@@ -293,6 +326,7 @@ def send_to_dingtalk(
         rss_items=rss_items,
         rss_new_items=rss_new_items,
         ai_content=ai_content,
+        industry_content=industry_content,
         standalone_data=standalone_data,
         ai_stats=ai_stats,
         report_type=report_type,
@@ -360,10 +394,11 @@ def send_to_wework(
     batch_size: int = 4000,
     batch_interval: float = 1.0,
     msg_type: str = "markdown",
-    split_content_func: Callable = None,
+    split_content_func: Optional[Callable] = None,
     rss_items: Optional[list] = None,
     rss_new_items: Optional[list] = None,
     ai_analysis: Any = None,
+    industry_analysis: Any = None,
     display_regions: Optional[Dict] = None,
     standalone_data: Optional[Dict] = None,
 ) -> bool:
@@ -388,6 +423,9 @@ def send_to_wework(
     Returns:
         bool: 发送是否成功
     """
+    if split_content_func is None:
+        raise ValueError("split_content_func is required")
+
     headers = {"Content-Type": "application/json"}
     proxies = None
     if proxy_url:
@@ -409,6 +447,7 @@ def send_to_wework(
 
     # 渲染 AI 分析内容（如果有）
     ai_content = None
+    industry_content = None
     ai_stats = None
     if ai_analysis:
         ai_content = _render_ai_analysis(ai_analysis, "wework")
@@ -422,6 +461,8 @@ def send_to_wework(
                 "rss_count": getattr(ai_analysis, "rss_count", 0),
                 "ai_mode": getattr(ai_analysis, "ai_mode", ""),
             }
+    if industry_analysis:
+        industry_content = _render_industry_analysis(industry_analysis, "wework")
 
     # 获取分批内容，预留批次头部空间
     header_reserve = get_max_batch_header_size(header_format_type)
@@ -430,6 +471,7 @@ def send_to_wework(
         rss_items=rss_items,
         rss_new_items=rss_new_items,
         ai_content=ai_content,
+        industry_content=industry_content,
         standalone_data=standalone_data,
         ai_stats=ai_stats,
         report_type=report_type,
@@ -499,10 +541,11 @@ def send_to_telegram(
     *,
     batch_size: int = 4000,
     batch_interval: float = 1.0,
-    split_content_func: Callable = None,
+    split_content_func: Optional[Callable] = None,
     rss_items: Optional[list] = None,
     rss_new_items: Optional[list] = None,
     ai_analysis: Any = None,
+    industry_analysis: Any = None,
     display_regions: Optional[Dict] = None,
     standalone_data: Optional[Dict] = None,
 ) -> bool:
@@ -527,6 +570,9 @@ def send_to_telegram(
     Returns:
         bool: 发送是否成功
     """
+    if split_content_func is None:
+        raise ValueError("split_content_func is required")
+
     headers = {"Content-Type": "application/json"}
     url = f"https://api.telegram.org/bot{bot_token}/sendMessage"
 
@@ -539,6 +585,7 @@ def send_to_telegram(
 
     # 渲染 AI 分析内容（如果有）
     ai_content = None
+    industry_content = None
     ai_stats = None
     if ai_analysis:
         ai_content = _render_ai_analysis(ai_analysis, "telegram")
@@ -552,6 +599,8 @@ def send_to_telegram(
                 "rss_count": getattr(ai_analysis, "rss_count", 0),
                 "ai_mode": getattr(ai_analysis, "ai_mode", ""),
             }
+    if industry_analysis:
+        industry_content = _render_industry_analysis(industry_analysis, "telegram")
 
     # 获取分批内容，预留批次头部空间
     header_reserve = get_max_batch_header_size("telegram")
@@ -560,6 +609,7 @@ def send_to_telegram(
         rss_items=rss_items,
         rss_new_items=rss_new_items,
         ai_content=ai_content,
+        industry_content=industry_content,
         standalone_data=standalone_data,
         ai_stats=ai_stats,
         report_type=report_type,
@@ -623,7 +673,7 @@ def send_to_email(
     custom_smtp_server: Optional[str] = None,
     custom_smtp_port: Optional[int] = None,
     *,
-    get_time_func: Callable = None,
+    get_time_func: Optional[Callable] = None,
 ) -> bool:
     """
     发送邮件通知
@@ -644,6 +694,8 @@ def send_to_email(
     Note:
         AI 分析内容已在 HTML 生成时嵌入，无需再追加
     """
+    smtp_server = ""
+    smtp_port = 0
     try:
         if not html_file_path or not Path(html_file_path).exists():
             print(f"错误：HTML文件不存在或未提供: {html_file_path}")
@@ -695,7 +747,7 @@ def send_to_email(
         # 设置邮件主题
         now = get_time_func() if get_time_func else datetime.now()
         subject = f"TrendRadar 热点分析报告 - {report_type} - {now.strftime('%m月%d日 %H:%M')}"
-        msg["Subject"] = Header(subject, "utf-8")
+        msg["Subject"] = str(Header(subject, "utf-8"))
 
         # 设置其他标准 header
         msg["MIME-Version"] = "1.0"
@@ -785,10 +837,11 @@ def send_to_ntfy(
     account_label: str = "",
     *,
     batch_size: int = 3800,
-    split_content_func: Callable = None,
+    split_content_func: Optional[Callable] = None,
     rss_items: Optional[list] = None,
     rss_new_items: Optional[list] = None,
     ai_analysis: Any = None,
+    industry_analysis: Any = None,
     display_regions: Optional[Dict] = None,
     standalone_data: Optional[Dict] = None,
 ) -> bool:
@@ -813,6 +866,9 @@ def send_to_ntfy(
     Returns:
         bool: 发送是否成功
     """
+    if split_content_func is None:
+        raise ValueError("split_content_func is required")
+
     # 日志前缀
     log_prefix = f"ntfy{account_label}" if account_label else "ntfy"
 
@@ -848,6 +904,7 @@ def send_to_ntfy(
 
     # 渲染 AI 分析内容（如果有），合并到主内容中
     ai_content = None
+    industry_content = None
     ai_stats = None
     if ai_analysis:
         ai_content = _render_ai_analysis(ai_analysis, "ntfy")
@@ -861,6 +918,8 @@ def send_to_ntfy(
                 "rss_count": getattr(ai_analysis, "rss_count", 0),
                 "ai_mode": getattr(ai_analysis, "ai_mode", ""),
             }
+    if industry_analysis:
+        industry_content = _render_industry_analysis(industry_analysis, "ntfy")
 
     # 获取分批内容，预留批次头部空间
     header_reserve = get_max_batch_header_size("ntfy")
@@ -869,6 +928,7 @@ def send_to_ntfy(
         rss_items=rss_items,
         rss_new_items=rss_new_items,
         ai_content=ai_content,
+        industry_content=industry_content,
         standalone_data=standalone_data,
         ai_stats=ai_stats,
         report_type=report_type,
@@ -987,10 +1047,11 @@ def send_to_bark(
     *,
     batch_size: int = 3600,
     batch_interval: float = 1.0,
-    split_content_func: Callable = None,
+    split_content_func: Optional[Callable] = None,
     rss_items: Optional[list] = None,
     rss_new_items: Optional[list] = None,
     ai_analysis: Any = None,
+    industry_analysis: Any = None,
     display_regions: Optional[Dict] = None,
     standalone_data: Optional[Dict] = None,
 ) -> bool:
@@ -1014,6 +1075,9 @@ def send_to_bark(
     Returns:
         bool: 发送是否成功
     """
+    if split_content_func is None:
+        raise ValueError("split_content_func is required")
+
     # 日志前缀
     log_prefix = f"Bark{account_label}" if account_label else "Bark"
 
@@ -1035,6 +1099,7 @@ def send_to_bark(
 
     # 渲染 AI 分析内容（如果有），合并到主内容中
     ai_content = None
+    industry_content = None
     ai_stats = None
     if ai_analysis:
         ai_content = _render_ai_analysis(ai_analysis, "bark")
@@ -1048,6 +1113,8 @@ def send_to_bark(
                 "rss_count": getattr(ai_analysis, "rss_count", 0),
                 "ai_mode": getattr(ai_analysis, "ai_mode", ""),
             }
+    if industry_analysis:
+        industry_content = _render_industry_analysis(industry_analysis, "bark")
 
     # 获取分批内容，预留批次头部空间
     header_reserve = get_max_batch_header_size("bark")
@@ -1056,6 +1123,7 @@ def send_to_bark(
         rss_items=rss_items,
         rss_new_items=rss_new_items,
         ai_content=ai_content,
+        industry_content=industry_content,
         standalone_data=standalone_data,
         ai_stats=ai_stats,
         report_type=report_type,
@@ -1161,10 +1229,11 @@ def send_to_slack(
     *,
     batch_size: int = 4000,
     batch_interval: float = 1.0,
-    split_content_func: Callable = None,
+    split_content_func: Optional[Callable] = None,
     rss_items: Optional[list] = None,
     rss_new_items: Optional[list] = None,
     ai_analysis: Any = None,
+    industry_analysis: Any = None,
     display_regions: Optional[Dict] = None,
     standalone_data: Optional[Dict] = None,
 ) -> bool:
@@ -1188,6 +1257,9 @@ def send_to_slack(
     Returns:
         bool: 发送是否成功
     """
+    if split_content_func is None:
+        raise ValueError("split_content_func is required")
+
     headers = {"Content-Type": "application/json"}
     proxies = None
     if proxy_url:
@@ -1198,6 +1270,7 @@ def send_to_slack(
 
     # 渲染 AI 分析内容（如果有），合并到主内容中
     ai_content = None
+    industry_content = None
     ai_stats = None
     if ai_analysis:
         ai_content = _render_ai_analysis(ai_analysis, "slack")
@@ -1211,6 +1284,8 @@ def send_to_slack(
                 "rss_count": getattr(ai_analysis, "rss_count", 0),
                 "ai_mode": getattr(ai_analysis, "ai_mode", ""),
             }
+    if industry_analysis:
+        industry_content = _render_industry_analysis(industry_analysis, "slack")
 
     # 获取分批内容，预留批次头部空间
     header_reserve = get_max_batch_header_size("slack")
@@ -1219,6 +1294,7 @@ def send_to_slack(
         rss_items=rss_items,
         rss_new_items=rss_new_items,
         ai_content=ai_content,
+        industry_content=industry_content,
         standalone_data=standalone_data,
         ai_stats=ai_stats,
         report_type=report_type,
@@ -1284,6 +1360,7 @@ def send_to_generic_webhook(
     rss_items: Optional[list] = None,
     rss_new_items: Optional[list] = None,
     ai_analysis: Any = None,
+    industry_analysis: Any = None,
     display_regions: Optional[Dict] = None,
     standalone_data: Optional[Dict] = None,
 ) -> bool:
@@ -1321,6 +1398,7 @@ def send_to_generic_webhook(
 
     # 渲染 AI 分析内容（如果有）
     ai_content = None
+    industry_content = None
     ai_stats = None
     if ai_analysis:
         # 通用 Webhook 使用 markdown 格式渲染 AI 分析
@@ -1334,6 +1412,8 @@ def send_to_generic_webhook(
                 "hotlist_count": getattr(ai_analysis, "hotlist_count", 0),
                 "rss_count": getattr(ai_analysis, "rss_count", 0),
             }
+    if industry_analysis:
+        industry_content = _render_industry_analysis(industry_analysis, "wework")
 
     # 获取分批内容
     # 使用 'wework' 作为 format_type 以获取 markdown 格式的通用输出
@@ -1344,6 +1424,7 @@ def send_to_generic_webhook(
         rss_items=rss_items,
         rss_new_items=rss_new_items,
         ai_content=ai_content,
+        industry_content=industry_content,
         standalone_data=standalone_data,
         ai_stats=ai_stats,
         report_type=report_type,

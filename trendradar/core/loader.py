@@ -227,11 +227,11 @@ def _load_display_config(config_data: Dict) -> Dict:
     standalone = display.get("standalone", {})
 
     # 默认区域顺序
-    default_region_order = ["hotlist", "rss", "new_items", "standalone", "ai_analysis"]
+    default_region_order = ["hotlist", "rss", "new_items", "standalone", "ai_analysis", "industry_analysis"]
     region_order = display.get("region_order", default_region_order)
 
     # 验证 region_order 中的值是否合法
-    valid_regions = {"hotlist", "rss", "new_items", "standalone", "ai_analysis"}
+    valid_regions = {"hotlist", "rss", "new_items", "standalone", "ai_analysis", "industry_analysis"}
     region_order = [r for r in region_order if r in valid_regions]
 
     # 如果过滤后为空，使用默认顺序
@@ -248,6 +248,7 @@ def _load_display_config(config_data: Dict) -> Dict:
             "RSS": regions.get("rss", True),
             "STANDALONE": regions.get("standalone", False),
             "AI_ANALYSIS": regions.get("ai_analysis", True),
+            "INDUSTRY_ANALYSIS": regions.get("industry_analysis", True),
         },
         # 独立展示区配置
         "STANDALONE": {
@@ -333,6 +334,61 @@ def _load_ai_filter_config(config_data: Dict) -> Dict:
         "UPDATE_TAGS_PROMPT_FILE": ai_filter.get("update_tags_prompt_file", "update_tags_prompt.txt"),
         "RECLASSIFY_THRESHOLD": ai_filter.get("reclassify_threshold", 0.6),
         "MIN_SCORE": float(ai_filter.get("min_score", 0)),
+    }
+
+
+def _load_industry_analysis_config(config_data: Dict) -> Dict:
+    """加载行业专项分析配置"""
+    industry_config = config_data.get("industry_analysis", {})
+    groups = industry_config.get("groups", []) or []
+
+    normalized_groups = []
+    for group in groups:
+        if not isinstance(group, dict):
+            continue
+        group_type = str(group.get("type", "") or "").strip()
+        if not group_type:
+            continue
+
+        dedup = group.get("dedup", {}) or {}
+        freshness = group.get("freshness", {}) or {}
+        focus = group.get("focus", {}) or {}
+        ai_cfg = group.get("ai", {}) or {}
+
+        normalized_groups.append({
+            "TYPE": group_type,
+            "ENABLED": group.get("enabled", True),
+            "DISPLAY_NAME": group.get("display_name", group_type),
+            "INCLUDE_IN_NOTIFICATION": group.get("include_in_notification", True),
+            "INCLUDE_IN_HTML": group.get("include_in_html", True),
+            "SOURCE_KINDS": group.get("source_kinds", ["kol", "media"]) or ["kol", "media"],
+            "DEDUP": {
+                "ENABLED": dedup.get("enabled", True),
+                "SIMILARITY_THRESHOLD": float(dedup.get("similarity_threshold", 0.82)),
+            },
+            "FRESHNESS": {
+                "ENABLED": freshness.get("enabled", True),
+                "HOURS": int(freshness.get("hours", 24) or 24),
+            },
+            "FOCUS": {
+                "CONSENSUS_DETECTION": focus.get("consensus_detection", True),
+                "FRESH_SIGNAL_DETECTION": focus.get("fresh_signal_detection", True),
+                "KOL_MEDIA_DIVERGENCE": focus.get("kol_media_divergence", True),
+            },
+            "AI": {
+                "ENABLED": ai_cfg.get("enabled", True),
+                "PROMPT_FILE": ai_cfg.get("prompt_file", "industry_analysis_prompt.txt"),
+                "MODE": ai_cfg.get("mode", "group"),
+                "MAX_ITEMS": int(ai_cfg.get("max_items", 80) or 80),
+                "MAX_KOL_ITEMS": int(ai_cfg.get("max_kol_items", 50) or 50),
+                "MAX_MEDIA_ITEMS": int(ai_cfg.get("max_media_items", 30) or 30),
+            },
+        })
+
+    return {
+        "ENABLED": industry_config.get("enabled", False),
+        "OUTPUT_LANGUAGE": industry_config.get("output_language", "zh-CN"),
+        "GROUPS": normalized_groups,
     }
 
 
@@ -592,6 +648,9 @@ def load_config(config_path: Optional[str] = None) -> Dict[str, Any]:
 
     # AI 智能筛选配置
     config["AI_FILTER"] = _load_ai_filter_config(config_data)
+
+    # 行业专项分析配置
+    config["INDUSTRY_ANALYSIS"] = _load_industry_analysis_config(config_data)
 
     # 筛选策略配置
     config["FILTER"] = _load_filter_config(config_data)

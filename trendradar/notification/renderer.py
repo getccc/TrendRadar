@@ -12,7 +12,7 @@ from trendradar.report.formatter import format_title_for_platform
 
 
 # 默认区域顺序
-DEFAULT_REGION_ORDER = ["hotlist", "rss", "new_items", "standalone", "ai_analysis"]
+DEFAULT_REGION_ORDER = ["hotlist", "rss", "new_items", "standalone", "ai_analysis", "industry_analysis"]
 
 
 def render_feishu_content(

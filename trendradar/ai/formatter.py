@@ -8,6 +8,7 @@ AI 分析结果格式化模块
 import html as html_lib
 import re
 from .analyzer import AIAnalysisResult
+from trendradar.industry import IndustryAnalysisResult
 
 
 def _escape_html(text: str) -> str:
@@ -368,6 +369,92 @@ def get_ai_analysis_renderer(channel: str):
         "slack": render_ai_analysis_markdown,
     }
     return renderers.get(channel, render_ai_analysis_markdown)
+
+
+def render_industry_analysis_markdown(results: list[IndustryAnalysisResult]) -> str:
+    if not results:
+        return ""
+    sections = []
+    for result in results:
+        if result.skipped and not result.success:
+            continue
+        if not result.success:
+            sections.append(f"**🪙 {result.display_name or result.type}**\n⚠️ {result.error}")
+            continue
+        lines = [f"**🪙 {result.display_name or result.type}**"]
+        if result.summary:
+            lines.extend(["**今日主线**", _format_list_content(result.summary), ""])
+        if result.consensus_topics:
+            lines.extend(["**共识热点**", _format_list_content(result.consensus_topics), ""])
+        if result.fresh_signals:
+            lines.extend(["**新鲜信号**", _format_list_content(result.fresh_signals), ""])
+        if result.kol_media_divergence:
+            lines.extend(["**KOL / 媒体分歧**", _format_list_content(result.kol_media_divergence), ""])
+        if result.notable_entities:
+            lines.extend(["**重点实体**", _format_list_content(result.notable_entities), ""])
+        if result.risk_watch:
+            lines.extend(["**风险观察**", _format_list_content(result.risk_watch), ""])
+        sections.append("\n".join(lines).strip())
+    return "\n\n".join(sections)
+
+
+def render_industry_analysis_plain(results: list[IndustryAnalysisResult]) -> str:
+    if not results:
+        return ""
+    sections = []
+    for result in results:
+        if result.skipped and not result.success:
+            continue
+        if not result.success:
+            sections.append(f"[行业专项 | {result.display_name or result.type}]\n{result.error}")
+            continue
+        lines = [f"[行业专项 | {result.display_name or result.type}]"]
+        if result.summary:
+            lines.extend(["[今日主线]", _format_list_content(result.summary), ""])
+        if result.consensus_topics:
+            lines.extend(["[共识热点]", _format_list_content(result.consensus_topics), ""])
+        if result.fresh_signals:
+            lines.extend(["[新鲜信号]", _format_list_content(result.fresh_signals), ""])
+        if result.kol_media_divergence:
+            lines.extend(["[KOL / 媒体分歧]", _format_list_content(result.kol_media_divergence), ""])
+        if result.notable_entities:
+            lines.extend(["[重点实体]", _format_list_content(result.notable_entities), ""])
+        if result.risk_watch:
+            lines.extend(["[风险观察]", _format_list_content(result.risk_watch), ""])
+        sections.append("\n".join(lines).strip())
+    return "\n\n".join(sections)
+
+
+def render_industry_analysis_html_rich(results: list[IndustryAnalysisResult]) -> str:
+    if not results:
+        return ""
+    blocks = []
+    for result in results:
+        if result.skipped and not result.success:
+            continue
+        if not result.success:
+            blocks.append(
+                f'<div class="ai-section"><div class="ai-error">⚠️ { _escape_html(result.display_name or result.type) }: {_escape_html(result.error)}</div></div>'
+            )
+            continue
+        content_blocks = []
+        for title, content in [
+            ("今日主线", result.summary),
+            ("共识热点", result.consensus_topics),
+            ("新鲜信号", result.fresh_signals),
+            ("KOL / 媒体分歧", result.kol_media_divergence),
+            ("重点实体", result.notable_entities),
+            ("风险观察", result.risk_watch),
+        ]:
+            if content:
+                content_html = _escape_html(_format_list_content(content)).replace("\n", "<br>")
+                content_blocks.append(
+                    f'<div class="ai-block"><div class="ai-block-title">{_escape_html(title)}</div><div class="ai-block-content">{content_html}</div></div>'
+                )
+        blocks.append(
+            f'''<div class="ai-section"><div class="ai-section-header"><div class="ai-section-title">🪙 {_escape_html(result.display_name or result.type)}</div><span class="ai-section-badge">Industry</span></div><div class="ai-blocks-grid">{''.join(content_blocks)}</div></div>'''
+        )
+    return "".join(blocks)
 
 
 def render_ai_analysis_html_rich(result: AIAnalysisResult) -> str:

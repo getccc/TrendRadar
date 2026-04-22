@@ -79,7 +79,7 @@ def _safe_append_batch(
 
 def _safe_new_batch(
     new_content: str, footer: str, max_bytes: int, base_header: str,
-    batches: List[str] = None
+    batches: Optional[List[str]] = None
 ) -> str:
     """安全创建新批次，超限时将溢出内容拆分到 batches 中，返回最后一段作为 current_batch
 
@@ -129,7 +129,7 @@ DEFAULT_BATCH_SIZES = {
 }
 
 # 默认区域顺序
-DEFAULT_REGION_ORDER = ["hotlist", "rss", "new_items", "standalone", "ai_analysis"]
+DEFAULT_REGION_ORDER = ["hotlist", "rss", "new_items", "standalone", "ai_analysis", "industry_analysis"]
 
 
 def split_content_into_batches(
@@ -147,6 +147,7 @@ def split_content_into_batches(
     timezone: str = DEFAULT_TIMEZONE,
     display_mode: str = "keyword",
     ai_content: Optional[str] = None,
+    industry_content: Optional[str] = None,
     standalone_data: Optional[Dict] = None,
     rank_threshold: int = 10,
     ai_stats: Optional[Dict] = None,
@@ -813,6 +814,36 @@ def split_content_into_batches(
 
         return current_batch, current_batch_has_content, batches
 
+    def process_industry_section(current_batch, current_batch_has_content, batches, add_separator=True):
+        nonlocal industry_content
+        if not industry_content:
+            return current_batch, current_batch_has_content, batches
+
+        separator = ""
+        if add_separator and current_batch_has_content:
+            if format_type == "feishu":
+                separator = f"\n{feishu_separator}\n\n"
+            elif format_type == "dingtalk":
+                separator = "\n---\n\n"
+            elif format_type in ("wework", "bark"):
+                separator = "\n\n\n\n"
+            else:
+                separator = "\n\n"
+
+        test_content = current_batch + separator + industry_content
+        if len(test_content.encode("utf-8")) + len(base_footer.encode("utf-8")) < max_bytes:
+            current_batch = test_content
+            current_batch_has_content = True
+        else:
+            if current_batch_has_content:
+                _safe_append_batch(batches, current_batch, base_footer, max_bytes, base_header)
+            current_batch = _safe_new_batch(
+                base_header + industry_content, base_footer, max_bytes, base_header, batches
+            )
+            current_batch_has_content = True
+
+        return current_batch, current_batch_has_content, batches
+
     # 定义处理独立展示区的函数
     def process_standalone_section_wrapper(current_batch, current_batch_has_content, batches, add_separator=True):
         """处理独立展示区"""
@@ -893,6 +924,10 @@ def split_content_into_batches(
         elif region == "ai_analysis":
             # 处理 AI 分析
             current_batch, current_batch_has_content, batches = process_ai_section(
+                current_batch, current_batch_has_content, batches, add_separator
+            )
+        elif region == "industry_analysis":
+            current_batch, current_batch_has_content, batches = process_industry_section(
                 current_batch, current_batch_has_content, batches, add_separator
             )
 
