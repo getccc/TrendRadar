@@ -208,7 +208,7 @@ def _load_rss_config(config_data: Dict) -> Dict:
     # RSS 配置直接从 config.yaml 读取，不再支持环境变量
     return {
         "ENABLED": rss.get("enabled", False),
-        "REQUEST_INTERVAL": advanced_rss.get("request_interval", 2000),
+        "REQUEST_INTERVAL": rss.get("request_interval", advanced_rss.get("request_interval", 2000)),
         "TIMEOUT": advanced_rss.get("timeout", 15),
         "USE_PROXY": advanced_rss.get("use_proxy", False),
         "PROXY_URL": rss_proxy_url,
