@@ -7,8 +7,11 @@ AI 分析结果格式化模块
 
 import html as html_lib
 import re
+from typing import TYPE_CHECKING
 from .analyzer import AIAnalysisResult
-from trendradar.industry import IndustryAnalysisResult
+
+if TYPE_CHECKING:
+    from trendradar.industry import IndustryAnalysisResult
 
 
 def _escape_html(text: str) -> str:
@@ -371,7 +374,7 @@ def get_ai_analysis_renderer(channel: str):
     return renderers.get(channel, render_ai_analysis_markdown)
 
 
-def render_industry_analysis_markdown(results: list[IndustryAnalysisResult]) -> str:
+def render_industry_analysis_markdown(results: list["IndustryAnalysisResult"]) -> str:
     if not results:
         return ""
     sections = []
@@ -398,7 +401,7 @@ def render_industry_analysis_markdown(results: list[IndustryAnalysisResult]) -> 
     return "\n\n".join(sections)
 
 
-def render_industry_analysis_plain(results: list[IndustryAnalysisResult]) -> str:
+def render_industry_analysis_plain(results: list["IndustryAnalysisResult"]) -> str:
     if not results:
         return ""
     sections = []
@@ -425,7 +428,7 @@ def render_industry_analysis_plain(results: list[IndustryAnalysisResult]) -> str
     return "\n\n".join(sections)
 
 
-def render_industry_analysis_html_rich(results: list[IndustryAnalysisResult]) -> str:
+def render_industry_analysis_html_rich(results: list["IndustryAnalysisResult"]) -> str:
     if not results:
         return ""
     blocks = []
