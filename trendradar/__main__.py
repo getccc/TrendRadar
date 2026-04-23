@@ -824,6 +824,7 @@ class NewsAnalyzer:
         quiet: bool = False,
         rss_items: Optional[List[Dict]] = None,
         rss_new_items: Optional[List[Dict]] = None,
+        raw_rss_items: Optional[List[Dict]] = None,
         standalone_data: Optional[Dict] = None,
         schedule: Optional[ResolvedSchedule] = None,
         rss_new_urls: Optional[set] = None,
@@ -902,8 +903,8 @@ class NewsAnalyzer:
                     display_regions=display_regions,
                 )
 
-        if rss_items:
-            industry_results = self._run_industry_analysis(rss_items)
+        if raw_rss_items:
+            industry_results = self._run_industry_analysis(raw_rss_items)
 
         # HTML生成（如果启用）— 使用翻译后的数据
         html_file = None
@@ -1597,6 +1598,7 @@ class NewsAnalyzer:
                     global_filters=global_filters,
                     rss_items=rss_items,
                     rss_new_items=rss_new_items,
+                    raw_rss_items=raw_rss_items,
                     standalone_data=standalone_data,
                     schedule=schedule,
                     rss_new_urls=rss_new_urls,
@@ -1641,6 +1643,7 @@ class NewsAnalyzer:
                     global_filters=global_filters,
                     rss_items=rss_items,
                     rss_new_items=rss_new_items,
+                    raw_rss_items=raw_rss_items,
                     standalone_data=standalone_data,
                     schedule=schedule,
                     rss_new_urls=rss_new_urls,
@@ -1669,6 +1672,7 @@ class NewsAnalyzer:
                     global_filters=global_filters,
                     rss_items=rss_items,
                     rss_new_items=rss_new_items,
+                    raw_rss_items=raw_rss_items,
                     standalone_data=standalone_data,
                     schedule=schedule,
                     rss_new_urls=rss_new_urls,
@@ -1691,6 +1695,7 @@ class NewsAnalyzer:
                 global_filters=global_filters,
                 rss_items=rss_items,
                 rss_new_items=rss_new_items,
+                raw_rss_items=raw_rss_items,
                 standalone_data=standalone_data,
                 schedule=schedule,
                 rss_new_urls=rss_new_urls,
