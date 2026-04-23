@@ -1162,6 +1162,11 @@ class NewsAnalyzer:
                     max_items=feed_config.get("max_items", 50),
                     enabled=feed_config.get("enabled", True),
                     max_age_days=max_age_days,  # None=使用全局，0=禁用，>0=覆盖
+                    feed_type=str(feed_config.get("type", "") or "").strip(),
+                    source_kind=str(feed_config.get("source_kind", "media") or "media").strip() or "media",
+                    weight=int(feed_config.get("weight", 1) or 1),
+                    tags=feed_config.get("tags", []) or [],
+                    lang_hint=str(feed_config.get("lang_hint", "") or "").strip(),
                 )
                 if feed.id and feed.url and feed.enabled:
                     feeds.append(feed)
