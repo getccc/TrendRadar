@@ -1446,6 +1446,12 @@ class NewsAnalyzer:
                     "published_at": item.published_at,
                     "summary": item.summary,
                     "author": item.author,
+                    "feed_type": item.feed_type,
+                    "source_kind": item.source_kind,
+                    "weight": item.weight,
+                    "tags": item.tags,
+                    "lang_hint": item.lang_hint,
+                    "lang_detected": item.lang_detected,
                 })
 
         # 输出过滤统计
