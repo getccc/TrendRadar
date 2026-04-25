@@ -66,6 +66,15 @@ class IndustryAnalyzer:
         print(f"[Industry] {message}")
 
     @staticmethod
+    def _preview_text(text: str, max_len: int = 240) -> str:
+        normalized = re.sub(r"\s+", " ", (text or "")).strip()
+        if not normalized:
+            return "<empty>"
+        if len(normalized) > max_len:
+            return normalized[:max_len] + "..."
+        return normalized
+
+    @staticmethod
     def _normalize_text(text: str) -> str:
         text = (text or "").strip().lower()
         text = re.sub(r"https?://\S+", "", text)
@@ -160,7 +169,10 @@ class IndustryAnalyzer:
             start = response.find("{")
             end = response.rfind("}")
             if start == -1 or end == -1 or end <= start:
-                raise ValueError("AI 响应中未找到 JSON")
+                preview = self._preview_text(response)
+                raise ValueError(
+                    f"AI 响应中未找到 JSON(len={len(response or '')}, preview={preview})"
+                )
             data = json.loads(response[start:end + 1])
             result.success = True
             result.summary = data.get("summary", "")
@@ -266,6 +278,10 @@ class IndustryAnalyzer:
 
         try:
             response = self.client.chat(messages)
+            self._log(
+                f"group={group_name} raw response: len={len(response or '')}, "
+                f"preview={self._preview_text(response)}"
+            )
             parsed = self._parse_response(response, group)
             parsed.raw_count = result.raw_count
             parsed.kol_count = result.kol_count
