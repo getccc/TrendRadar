@@ -7,6 +7,7 @@
 
 from __future__ import annotations
 
+from collections import Counter
 import json
 import re
 from dataclasses import dataclass, field
@@ -51,6 +52,18 @@ class IndustryAnalyzer:
         self.get_time_func = get_time_func
         self.debug = debug
         self.client = AIClient(ai_config)
+
+    @staticmethod
+    def _format_counter(counter: Counter, max_items: int = 8) -> str:
+        if not counter:
+            return "-"
+        parts = [f"{key}:{value}" for key, value in counter.most_common(max_items)]
+        if len(counter) > max_items:
+            parts.append(f"...(+{len(counter) - max_items})")
+        return ", ".join(parts)
+
+    def _log(self, message: str) -> None:
+        print(f"[Industry] {message}")
 
     @staticmethod
     def _normalize_text(text: str) -> str:
@@ -113,10 +126,7 @@ class IndustryAnalyzer:
             line += f"\n  summary: {summary}"
         return line
 
-    def _build_prompt(self, group: Dict, items: List[Dict], system_prompt: str, user_template: str) -> tuple[str, str]:
-        type_name = group["TYPE"]
-        display_name = group["DISPLAY_NAME"]
-        output_language = self.industry_config.get("OUTPUT_LANGUAGE", "zh-CN")
+    def _select_prompt_items(self, group: Dict, items: List[Dict]) -> List[Dict]:
         kol_items = [item for item in items if item.get("source_kind") == "kol"][: group["AI"]["MAX_KOL_ITEMS"]]
         media_items = [item for item in items if item.get("source_kind") == "media"][: group["AI"]["MAX_MEDIA_ITEMS"]]
         remaining = max(group["AI"]["MAX_ITEMS"] - len(kol_items) - len(media_items), 0)
@@ -124,7 +134,13 @@ class IndustryAnalyzer:
             item for item in items
             if item.get("source_kind") not in ("kol", "media")
         ][:remaining]
-        selected = (kol_items + media_items + others)[: group["AI"]["MAX_ITEMS"]]
+        return (kol_items + media_items + others)[: group["AI"]["MAX_ITEMS"]]
+
+    def _build_prompt(self, group: Dict, items: List[Dict], system_prompt: str, user_template: str) -> tuple[str, str]:
+        type_name = group["TYPE"]
+        display_name = group["DISPLAY_NAME"]
+        output_language = self.industry_config.get("OUTPUT_LANGUAGE", "zh-CN")
+        selected = self._select_prompt_items(group, items)
 
         content_lines = [self._format_item(item) for item in selected]
         user_prompt = user_template
@@ -160,19 +176,53 @@ class IndustryAnalyzer:
 
     def analyze_group(self, group: Dict, items: List[Dict]) -> IndustryAnalysisResult:
         result = IndustryAnalysisResult(type=group["TYPE"], display_name=group["DISPLAY_NAME"])
+        group_name = result.display_name or result.type
+        source_kinds = set(group.get("SOURCE_KINDS", ["kol", "media"]))
+        freshness = group.get("FRESHNESS", {})
+        dedup_enabled = group.get("DEDUP", {}).get("ENABLED", True)
+
+        self._log(
+            f"group={group_name} start: input={len(items)}, "
+            f"enabled={group.get('ENABLED', True)}, ai_enabled={group.get('AI', {}).get('ENABLED', True)}, "
+            f"source_kinds={sorted(source_kinds)}, freshness={freshness.get('ENABLED', True)}/{freshness.get('HOURS', 24)}h, "
+            f"dedup={dedup_enabled}"
+        )
+
         if not group.get("ENABLED", True) or not group.get("AI", {}).get("ENABLED", True):
             result.skipped = True
-            result.error = "行业分析已禁用"
+            result.error = (
+                f"行业分析已禁用(group.enabled={group.get('ENABLED', True)}, "
+                f"group.ai.enabled={group.get('AI', {}).get('ENABLED', True)})"
+            )
+            self._log(f"group={group_name} skipped: {result.error}")
             return result
 
         filtered = items
-        freshness = group.get("FRESHNESS", {})
+        before_freshness = len(filtered)
         if freshness.get("ENABLED", True):
             filtered = self._filter_by_freshness(filtered, freshness.get("HOURS", 24))
+        freshness_removed = before_freshness - len(filtered)
+        self._log(
+            f"group={group_name} after freshness: kept={len(filtered)}, removed={freshness_removed}"
+        )
 
-        source_kinds = set(group.get("SOURCE_KINDS", ["kol", "media"]))
+        before_source_kind = len(filtered)
+        source_kind_counter = Counter(str(item.get("source_kind", "media") or "media") for item in filtered)
         filtered = [item for item in filtered if item.get("source_kind", "media") in source_kinds]
-        filtered = self._dedup_items(filtered)
+        source_kind_removed = before_source_kind - len(filtered)
+        self._log(
+            f"group={group_name} after source_kind: kept={len(filtered)}, removed={source_kind_removed}, "
+            f"source_kind_breakdown={self._format_counter(source_kind_counter)}"
+        )
+
+        before_dedup = len(filtered)
+        if dedup_enabled:
+            filtered = self._dedup_items(filtered)
+        dedup_removed = before_dedup - len(filtered)
+        self._log(
+            f"group={group_name} after dedup: kept={len(filtered)}, removed={dedup_removed}, "
+            f"feeds={self._format_counter(Counter(item.get('feed_name', item.get('feed_id', 'unknown')) for item in filtered))}"
+        )
 
         result.raw_count = len(filtered)
         result.kol_count = sum(1 for item in filtered if item.get("source_kind") == "kol")
@@ -180,7 +230,12 @@ class IndustryAnalyzer:
 
         if not filtered:
             result.skipped = True
-            result.error = "该行业分组暂无可分析 RSS 内容"
+            result.error = (
+                "该行业分组暂无可分析 RSS 内容"
+                f"(input={len(items)}, freshness_kept={before_freshness - freshness_removed}, "
+                f"source_kind_kept={before_source_kind - source_kind_removed}, dedup_kept={len(filtered)})"
+            )
+            self._log(f"group={group_name} skipped: {result.error}")
             return result
 
         system_prompt, user_template = load_prompt_template(
@@ -189,7 +244,16 @@ class IndustryAnalyzer:
         )
         if not user_template:
             result.error = "行业分析提示词为空"
+            self._log(f"group={group_name} failed before AI: {result.error}")
             return result
+
+        selected_items = self._select_prompt_items(group, filtered)
+        self._log(
+            f"group={group_name} prompt items: selected={len(selected_items)}/{len(filtered)}, "
+            f"kol={sum(1 for item in selected_items if item.get('source_kind') == 'kol')}, "
+            f"media={sum(1 for item in selected_items if item.get('source_kind') == 'media')}, "
+            f"max_items={group['AI']['MAX_ITEMS']}"
+        )
 
         system_prompt, user_prompt = self._build_prompt(group, filtered, system_prompt, user_template)
         messages = []
@@ -206,25 +270,46 @@ class IndustryAnalyzer:
             parsed.raw_count = result.raw_count
             parsed.kol_count = result.kol_count
             parsed.media_count = result.media_count
+            if parsed.success:
+                self._log(
+                    f"group={group_name} success: raw_count={parsed.raw_count}, "
+                    f"kol={parsed.kol_count}, media={parsed.media_count}"
+                )
+            else:
+                self._log(f"group={group_name} failed after AI: {parsed.error}")
             return parsed
         except Exception as e:
             result.error = f"行业分析失败: {e}"
+            self._log(f"group={group_name} failed during AI call: {result.error}")
             return result
 
     def analyze(self, rss_items: List[Dict]) -> List[IndustryAnalysisResult]:
         groups = self.industry_config.get("GROUPS", [])
         if not self.industry_config.get("ENABLED", False) or not groups:
+            self._log(
+                f"skip analyze: enabled={self.industry_config.get('ENABLED', False)}, groups={len(groups)}"
+            )
             return []
 
         grouped_items: Dict[str, List[Dict]] = {}
+        missing_type_count = 0
         for item in rss_items or []:
             item_type = str(item.get("feed_type", "") or "").strip()
             if not item_type:
+                missing_type_count += 1
                 continue
             grouped_items.setdefault(item_type, []).append(item)
+
+        self._log(
+            f"input summary: rss_items={len(rss_items or [])}, with_type={sum(len(items) for items in grouped_items.values())}, "
+            f"without_type={missing_type_count}, type_breakdown={self._format_counter(Counter({key: len(value) for key, value in grouped_items.items()}))}"
+        )
 
         results: List[IndustryAnalysisResult] = []
         for group in groups:
             items = grouped_items.get(group["TYPE"], [])
+            self._log(
+                f"group mapping: type={group['TYPE']}, matched_items={len(items)}, display_name={group['DISPLAY_NAME']}"
+            )
             results.append(self.analyze_group(group, items))
         return results

@@ -591,8 +591,25 @@ class NewsAnalyzer:
     ) -> List[IndustryAnalysisResult]:
         """执行 RSS 行业专项分析。"""
         industry_config = self.ctx.config.get("INDUSTRY_ANALYSIS", {})
-        if not industry_config.get("ENABLED", False) or not rss_items:
+        if not industry_config.get("ENABLED", False):
+            print("[Industry] 跳过行业分析: industry_analysis.enabled=false")
             return []
+        if not rss_items:
+            print("[Industry] 跳过行业分析: 没有可供分析的 RSS 条目")
+            return []
+
+        type_counter = {}
+        for item in rss_items:
+            item_type = str(item.get("feed_type", "") or "").strip() or "<empty>"
+            type_counter[item_type] = type_counter.get(item_type, 0) + 1
+        type_summary = ", ".join(f"{key}:{value}" for key, value in sorted(type_counter.items(), key=lambda x: (-x[1], x[0]))[:10])
+        if len(type_counter) > 10:
+            type_summary += f", ...(+{len(type_counter) - 10})"
+
+        print(
+            f"[Industry] 开始行业分析: rss_items={len(rss_items)}, "
+            f"groups={len(industry_config.get('GROUPS', []))}, type_breakdown={type_summary or '-'}"
+        )
 
         analyzer = self.ctx.create_industry_analyzer()
         results = analyzer.analyze(rss_items)
