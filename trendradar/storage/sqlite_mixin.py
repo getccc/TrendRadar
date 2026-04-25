@@ -5,6 +5,7 @@ SQLite 存储 Mixin
 提供共用的 SQLite 数据库操作逻辑，供 LocalStorageBackend 和 RemoteStorageBackend 复用。
 """
 
+import json
 import sqlite3
 from abc import abstractmethod
 from datetime import datetime
@@ -95,8 +96,28 @@ class SQLiteStorageMixin:
             if ai_filter_schema.exists():
                 with open(ai_filter_schema, "r", encoding="utf-8") as f:
                     conn.executescript(f.read())
+        elif db_type == "rss":
+            self._ensure_rss_metadata_columns(conn)
 
         conn.commit()
+
+    def _ensure_rss_metadata_columns(self, conn: sqlite3.Connection) -> None:
+        """为旧版 RSS 数据库补齐行业分析所需元数据列。"""
+        cursor = conn.cursor()
+        cursor.execute("PRAGMA table_info(rss_items)")
+        existing_columns = {row[1] for row in cursor.fetchall()}
+        required_columns = {
+            "feed_type": "TEXT DEFAULT ''",
+            "source_kind": "TEXT DEFAULT 'media'",
+            "weight": "INTEGER DEFAULT 1",
+            "tags": "TEXT DEFAULT '[]'",
+            "lang_hint": "TEXT DEFAULT ''",
+            "lang_detected": "TEXT DEFAULT 'unknown'",
+        }
+
+        for column_name, column_def in required_columns.items():
+            if column_name not in existing_columns:
+                cursor.execute(f"ALTER TABLE rss_items ADD COLUMN {column_name} {column_def}")
 
     # ========================================
     # 新闻数据存储
@@ -835,32 +856,73 @@ class SQLiteStorageMixin:
                                         published_at = ?,
                                         summary = ?,
                                         author = ?,
+                                        feed_type = ?,
+                                        source_kind = ?,
+                                        weight = ?,
+                                        tags = ?,
+                                        lang_hint = ?,
+                                        lang_detected = ?,
                                         last_crawl_time = ?,
                                         crawl_count = crawl_count + 1,
                                         updated_at = ?
                                     WHERE id = ?
-                                """, (item.title, item.published_at, item.summary,
-                                      item.author, data.crawl_time, now_str, existing_id))
+                                """, (
+                                    item.title,
+                                    item.published_at,
+                                    item.summary,
+                                    item.author,
+                                    item.feed_type,
+                                    item.source_kind,
+                                    item.weight,
+                                    json.dumps(item.tags or [], ensure_ascii=False),
+                                    item.lang_hint,
+                                    item.lang_detected,
+                                    data.crawl_time,
+                                    now_str,
+                                    existing_id,
+                                ))
                                 updated_count += 1
                             else:
                                 # 不存在，插入新记录（使用 ON CONFLICT 兜底处理并发/竞争场景）
                                 cursor.execute("""
                                     INSERT INTO rss_items
                                     (title, feed_id, url, published_at, summary, author,
+                                     feed_type, source_kind, weight, tags, lang_hint, lang_detected,
                                      first_crawl_time, last_crawl_time, crawl_count,
                                      created_at, updated_at)
-                                    VALUES (?, ?, ?, ?, ?, ?, ?, ?, 1, ?, ?)
+                                    VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, 1, ?, ?)
                                     ON CONFLICT(url, feed_id) DO UPDATE SET
                                         title = excluded.title,
                                         published_at = excluded.published_at,
                                         summary = excluded.summary,
                                         author = excluded.author,
+                                        feed_type = excluded.feed_type,
+                                        source_kind = excluded.source_kind,
+                                        weight = excluded.weight,
+                                        tags = excluded.tags,
+                                        lang_hint = excluded.lang_hint,
+                                        lang_detected = excluded.lang_detected,
                                         last_crawl_time = excluded.last_crawl_time,
                                         crawl_count = crawl_count + 1,
                                         updated_at = excluded.updated_at
-                                """, (item.title, feed_id, item.url, item.published_at,
-                                      item.summary, item.author, data.crawl_time,
-                                      data.crawl_time, now_str, now_str))
+                                """, (
+                                    item.title,
+                                    feed_id,
+                                    item.url,
+                                    item.published_at,
+                                    item.summary,
+                                    item.author,
+                                    item.feed_type,
+                                    item.source_kind,
+                                    item.weight,
+                                    json.dumps(item.tags or [], ensure_ascii=False),
+                                    item.lang_hint,
+                                    item.lang_detected,
+                                    data.crawl_time,
+                                    data.crawl_time,
+                                    now_str,
+                                    now_str,
+                                ))
                                 new_count += 1
                         else:
                             # URL 为空，用 try-except 处理重复
@@ -868,12 +930,28 @@ class SQLiteStorageMixin:
                                 cursor.execute("""
                                     INSERT INTO rss_items
                                     (title, feed_id, url, published_at, summary, author,
+                                     feed_type, source_kind, weight, tags, lang_hint, lang_detected,
                                      first_crawl_time, last_crawl_time, crawl_count,
                                      created_at, updated_at)
-                                    VALUES (?, ?, ?, ?, ?, ?, ?, ?, 1, ?, ?)
-                                """, (item.title, feed_id, "", item.published_at,
-                                      item.summary, item.author, data.crawl_time,
-                                      data.crawl_time, now_str, now_str))
+                                    VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, 1, ?, ?)
+                                """, (
+                                    item.title,
+                                    feed_id,
+                                    "",
+                                    item.published_at,
+                                    item.summary,
+                                    item.author,
+                                    item.feed_type,
+                                    item.source_kind,
+                                    item.weight,
+                                    json.dumps(item.tags or [], ensure_ascii=False),
+                                    item.lang_hint,
+                                    item.lang_detected,
+                                    data.crawl_time,
+                                    data.crawl_time,
+                                    now_str,
+                                    now_str,
+                                ))
                                 new_count += 1
                             except sqlite3.IntegrityError:
                                 # 重复的空 URL 条目，忽略
@@ -946,6 +1024,7 @@ class SQLiteStorageMixin:
             cursor.execute("""
                 SELECT i.id, i.title, i.feed_id, f.name as feed_name,
                        i.url, i.published_at, i.summary, i.author,
+                       i.feed_type, i.source_kind, i.weight, i.tags, i.lang_hint, i.lang_detected,
                        i.first_crawl_time, i.last_crawl_time, i.crawl_count
                 FROM rss_items i
                 LEFT JOIN rss_feeds f ON i.feed_id = f.id
@@ -977,10 +1056,16 @@ class SQLiteStorageMixin:
                     published_at=row[5] or "",
                     summary=row[6] or "",
                     author=row[7] or "",
-                    crawl_time=row[9],
-                    first_time=row[8],
-                    last_time=row[9],
-                    count=row[10],
+                    feed_type=row[8] or "",
+                    source_kind=row[9] or "media",
+                    weight=int(row[10] or 1),
+                    tags=json.loads(row[11]) if row[11] else [],
+                    lang_hint=row[12] or "",
+                    lang_detected=row[13] or "unknown",
+                    crawl_time=row[15],
+                    first_time=row[14],
+                    last_time=row[15],
+                    count=row[16],
                 ))
 
             # 获取最新的抓取时间
@@ -1101,6 +1186,7 @@ class SQLiteStorageMixin:
             cursor.execute("""
                 SELECT i.id, i.title, i.feed_id, f.name as feed_name,
                        i.url, i.published_at, i.summary, i.author,
+                       i.feed_type, i.source_kind, i.weight, i.tags, i.lang_hint, i.lang_detected,
                        i.first_crawl_time, i.last_crawl_time, i.crawl_count
                 FROM rss_items i
                 LEFT JOIN rss_feeds f ON i.feed_id = f.id
@@ -1133,10 +1219,16 @@ class SQLiteStorageMixin:
                     published_at=row[5] or "",
                     summary=row[6] or "",
                     author=row[7] or "",
-                    crawl_time=row[9],
-                    first_time=row[8],
-                    last_time=row[9],
-                    count=row[10],
+                    feed_type=row[8] or "",
+                    source_kind=row[9] or "media",
+                    weight=int(row[10] or 1),
+                    tags=json.loads(row[11]) if row[11] else [],
+                    lang_hint=row[12] or "",
+                    lang_detected=row[13] or "unknown",
+                    crawl_time=row[15],
+                    first_time=row[14],
+                    last_time=row[15],
+                    count=row[16],
                 ))
 
             # 获取失败的源（针对最新一次抓取）

@@ -29,6 +29,12 @@ CREATE TABLE IF NOT EXISTS rss_items (
     published_at TEXT,                        -- RSS 发布时间（ISO 格式）
     summary TEXT,                             -- 摘要/描述
     author TEXT,                              -- 作者
+    feed_type TEXT DEFAULT '',                -- RSS 源行业类型（如 crypto / ai）
+    source_kind TEXT DEFAULT 'media',         -- 源类型（kol / media）
+    weight INTEGER DEFAULT 1,                 -- 源权重
+    tags TEXT DEFAULT '[]',                   -- 源标签（JSON 数组）
+    lang_hint TEXT DEFAULT '',                -- 配置层语言提示
+    lang_detected TEXT DEFAULT 'unknown',     -- 自动识别语言
     first_crawl_time TEXT NOT NULL,           -- 首次抓取时间
     last_crawl_time TEXT NOT NULL,            -- 最后抓取时间
     crawl_count INTEGER DEFAULT 1,            -- 抓取次数
