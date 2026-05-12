@@ -332,6 +332,61 @@ class NotificationDispatcher:
 
         return results
 
+    def dispatch_industry_feishu_standalone(
+        self,
+        industry_analysis: Optional[List[IndustryAnalysisResult]],
+        report_type: str,
+        proxy_url: Optional[str] = None,
+        mode: str = "daily",
+    ) -> Dict[str, bool]:
+        """按行业分组独立发送完整版飞书报告。"""
+        results: Dict[str, bool] = {}
+        if not industry_analysis:
+            return results
+
+        for result in industry_analysis:
+            if not result.success or result.skipped:
+                continue
+            if not result.send_standalone_report:
+                continue
+            webhook_url = result.standalone_feishu_webhook_url
+            if not webhook_url:
+                continue
+            standalone_report = getattr(result, "standalone_report", None)
+            if not standalone_report or not standalone_report.sections:
+                continue
+
+            key = result.type or result.display_name
+            wrapped_results = [result]
+            results[key] = send_to_feishu(
+                webhook_url=webhook_url,
+                report_data={"stats": [], "failed_ids": [], "new_titles": [], "id_to_name": {}},
+                report_type=f"{result.display_name or result.type} - 行业完整版",
+                update_info=None,
+                proxy_url=proxy_url,
+                mode=mode,
+                account_label="",
+                batch_size=self.config.get("FEISHU_BATCH_SIZE", 29000),
+                batch_interval=self.config.get("BATCH_SEND_INTERVAL", 1.0),
+                split_content_func=self.split_content_func,
+                get_time_func=self.get_time_func,
+                rss_items=None,
+                rss_new_items=None,
+                ai_analysis=None,
+                industry_analysis=wrapped_results,
+                display_regions={
+                    "HOTLIST": False,
+                    "NEW_ITEMS": False,
+                    "RSS": False,
+                    "STANDALONE": False,
+                    "AI_ANALYSIS": False,
+                    "INDUSTRY_ANALYSIS": True,
+                },
+                standalone_data=None,
+            )
+
+        return results
+
     def _send_to_multi_accounts(
         self,
         channel_name: str,

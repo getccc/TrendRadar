@@ -384,19 +384,35 @@ def render_industry_analysis_markdown(results: list["IndustryAnalysisResult"]) -
         if not result.success:
             sections.append(f"**🪙 {result.display_name or result.type}**\n⚠️ {result.error}")
             continue
+        standalone = getattr(result, "standalone_report", None)
         lines = [f"**🪙 {result.display_name or result.type}**"]
-        if result.summary:
-            lines.extend(["**今日主线**", _format_list_content(result.summary), ""])
-        if result.consensus_topics:
-            lines.extend(["**共识热点**", _format_list_content(result.consensus_topics), ""])
-        if result.fresh_signals:
-            lines.extend(["**新鲜信号**", _format_list_content(result.fresh_signals), ""])
-        if result.kol_media_divergence:
-            lines.extend(["**KOL / 媒体分歧**", _format_list_content(result.kol_media_divergence), ""])
-        if result.notable_entities:
-            lines.extend(["**重点实体**", _format_list_content(result.notable_entities), ""])
-        if result.risk_watch:
-            lines.extend(["**风险观察**", _format_list_content(result.risk_watch), ""])
+        if standalone and standalone.sections:
+            for section in standalone.sections:
+                lines.extend([f"**{section.title}**", _format_list_content(section.summary), ""])
+                if section.references:
+                    lines.append("**引用新闻**")
+                    for idx, ref in enumerate(section.references, start=1):
+                        source = ref.source_name or "未知来源"
+                        if ref.url:
+                            lines.append(f"{idx}. [{source}] [{ref.title}]({ref.url})")
+                        else:
+                            lines.append(f"{idx}. [{source}] {ref.title}")
+                    lines.append("")
+            if standalone.final_summary:
+                lines.extend(["**AI总结**", _format_list_content(standalone.final_summary), ""])
+        else:
+            if result.summary:
+                lines.extend(["**今日主线**", _format_list_content(result.summary), ""])
+            if result.consensus_topics:
+                lines.extend(["**共识热点**", _format_list_content(result.consensus_topics), ""])
+            if result.fresh_signals:
+                lines.extend(["**新鲜信号**", _format_list_content(result.fresh_signals), ""])
+            if result.kol_media_divergence:
+                lines.extend(["**KOL / 媒体分歧**", _format_list_content(result.kol_media_divergence), ""])
+            if result.notable_entities:
+                lines.extend(["**重点实体**", _format_list_content(result.notable_entities), ""])
+            if result.risk_watch:
+                lines.extend(["**风险观察**", _format_list_content(result.risk_watch), ""])
         sections.append("\n".join(lines).strip())
     return "\n\n".join(sections)
 
@@ -411,19 +427,32 @@ def render_industry_analysis_plain(results: list["IndustryAnalysisResult"]) -> s
         if not result.success:
             sections.append(f"[行业专项 | {result.display_name or result.type}]\n{result.error}")
             continue
+        standalone = getattr(result, "standalone_report", None)
         lines = [f"[行业专项 | {result.display_name or result.type}]"]
-        if result.summary:
-            lines.extend(["[今日主线]", _format_list_content(result.summary), ""])
-        if result.consensus_topics:
-            lines.extend(["[共识热点]", _format_list_content(result.consensus_topics), ""])
-        if result.fresh_signals:
-            lines.extend(["[新鲜信号]", _format_list_content(result.fresh_signals), ""])
-        if result.kol_media_divergence:
-            lines.extend(["[KOL / 媒体分歧]", _format_list_content(result.kol_media_divergence), ""])
-        if result.notable_entities:
-            lines.extend(["[重点实体]", _format_list_content(result.notable_entities), ""])
-        if result.risk_watch:
-            lines.extend(["[风险观察]", _format_list_content(result.risk_watch), ""])
+        if standalone and standalone.sections:
+            for section in standalone.sections:
+                lines.extend([f"[{section.title}]", _format_list_content(section.summary), ""])
+                if section.references:
+                    lines.append("[引用新闻]")
+                    for idx, ref in enumerate(section.references, start=1):
+                        source = ref.source_name or "未知来源"
+                        lines.append(f"{idx}. [{source}] {ref.title}")
+                    lines.append("")
+            if standalone.final_summary:
+                lines.extend(["[AI总结]", _format_list_content(standalone.final_summary), ""])
+        else:
+            if result.summary:
+                lines.extend(["[今日主线]", _format_list_content(result.summary), ""])
+            if result.consensus_topics:
+                lines.extend(["[共识热点]", _format_list_content(result.consensus_topics), ""])
+            if result.fresh_signals:
+                lines.extend(["[新鲜信号]", _format_list_content(result.fresh_signals), ""])
+            if result.kol_media_divergence:
+                lines.extend(["[KOL / 媒体分歧]", _format_list_content(result.kol_media_divergence), ""])
+            if result.notable_entities:
+                lines.extend(["[重点实体]", _format_list_content(result.notable_entities), ""])
+            if result.risk_watch:
+                lines.extend(["[风险观察]", _format_list_content(result.risk_watch), ""])
         sections.append("\n".join(lines).strip())
     return "\n\n".join(sections)
 
@@ -440,24 +469,68 @@ def render_industry_analysis_html_rich(results: list["IndustryAnalysisResult"]) 
                 f'<div class="ai-section"><div class="ai-error">⚠️ { _escape_html(result.display_name or result.type) }: {_escape_html(result.error)}</div></div>'
             )
             continue
+        standalone = getattr(result, "standalone_report", None)
         content_blocks = []
-        for title, content in [
-            ("今日主线", result.summary),
-            ("共识热点", result.consensus_topics),
-            ("新鲜信号", result.fresh_signals),
-            ("KOL / 媒体分歧", result.kol_media_divergence),
-            ("重点实体", result.notable_entities),
-            ("风险观察", result.risk_watch),
-        ]:
-            if content:
-                content_html = _escape_html(_format_list_content(content)).replace("\n", "<br>")
+        if standalone and standalone.sections:
+            for section in standalone.sections:
+                content_html = _escape_html(_format_list_content(section.summary)).replace("\n", "<br>")
+                refs_html = ""
+                if section.references:
+                    ref_lines = []
+                    for idx, ref in enumerate(section.references, start=1):
+                        source = _escape_html(ref.source_name or "未知来源")
+                        title = _escape_html(ref.title)
+                        if ref.url:
+                            ref_lines.append(f'{idx}. [{source}] <a href="{_escape_html(ref.url)}" target="_blank" class="news-link">{title}</a>')
+                        else:
+                            ref_lines.append(f'{idx}. [{source}] {title}')
+                    refs_html = f'<div class="ai-block-title">引用新闻</div><div class="ai-block-content">{"<br>".join(ref_lines)}</div>'
                 content_blocks.append(
-                    f'<div class="ai-block"><div class="ai-block-title">{_escape_html(title)}</div><div class="ai-block-content">{content_html}</div></div>'
+                    f'<div class="ai-block"><div class="ai-block-title">{_escape_html(section.title)}</div><div class="ai-block-content">{content_html}</div>{refs_html}</div>'
                 )
+            if standalone.final_summary:
+                final_html = _escape_html(_format_list_content(standalone.final_summary)).replace("\n", "<br>")
+                content_blocks.append(
+                    f'<div class="ai-block"><div class="ai-block-title">AI总结</div><div class="ai-block-content">{final_html}</div></div>'
+                )
+        else:
+            for title, content in [
+                ("今日主线", result.summary),
+                ("共识热点", result.consensus_topics),
+                ("新鲜信号", result.fresh_signals),
+                ("KOL / 媒体分歧", result.kol_media_divergence),
+                ("重点实体", result.notable_entities),
+                ("风险观察", result.risk_watch),
+            ]:
+                if content:
+                    content_html = _escape_html(_format_list_content(content)).replace("\n", "<br>")
+                    content_blocks.append(
+                        f'<div class="ai-block"><div class="ai-block-title">{_escape_html(title)}</div><div class="ai-block-content">{content_html}</div></div>'
+                    )
         blocks.append(
             f'''<div class="ai-section"><div class="ai-section-header"><div class="ai-section-title">🪙 {_escape_html(result.display_name or result.type)}</div><span class="ai-section-badge">Industry</span></div><div class="ai-blocks-grid">{''.join(content_blocks)}</div></div>'''
         )
     return "".join(blocks)
+
+
+def render_industry_summary_markdown(results: list["IndustryAnalysisResult"]) -> str:
+    if not results:
+        return ""
+    groups = []
+    for result in results:
+        if not result.success or result.skipped or not getattr(result, "include_in_main_report", True):
+            continue
+        summary_report = getattr(result, "summary_report", None)
+        if not summary_report:
+            continue
+        lines = [f"**🪙 {summary_report.display_name or summary_report.type}**"]
+        for section in summary_report.summary_sections:
+            if section.summary:
+                lines.append(f"- **{section.title}**：{section.summary}")
+        if summary_report.final_summary:
+            lines.append(f"- **总结**：{summary_report.final_summary}")
+        groups.append("\n".join(lines))
+    return "\n\n".join(groups)
 
 
 def render_ai_analysis_html_rich(result: AIAnalysisResult) -> str:

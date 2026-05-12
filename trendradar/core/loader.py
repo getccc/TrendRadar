@@ -340,6 +340,9 @@ def _load_ai_filter_config(config_data: Dict) -> Dict:
 def _load_industry_analysis_config(config_data: Dict) -> Dict:
     """加载行业专项分析配置"""
     industry_config = config_data.get("industry_analysis", {})
+    defaults = industry_config.get("defaults", {}) or {}
+    default_section_strategy = defaults.get("section_strategy", {}) or {}
+    default_summary = defaults.get("summary", {}) or {}
     groups = industry_config.get("groups", []) or []
 
     normalized_groups = []
@@ -354,6 +357,12 @@ def _load_industry_analysis_config(config_data: Dict) -> Dict:
         freshness = group.get("freshness", {}) or {}
         focus = group.get("focus", {}) or {}
         ai_cfg = group.get("ai", {}) or {}
+        notification_cfg = group.get("notification", {}) or {}
+        feishu_cfg = notification_cfg.get("feishu", {}) or {}
+        report_cfg = group.get("report", {}) or {}
+        section_strategy = report_cfg.get("section_strategy", {}) or {}
+        summary_cfg = report_cfg.get("summary", {}) or {}
+        tag_taxonomy = report_cfg.get("tag_taxonomy", {}) or {}
 
         normalized_groups.append({
             "TYPE": group_type,
@@ -361,6 +370,10 @@ def _load_industry_analysis_config(config_data: Dict) -> Dict:
             "DISPLAY_NAME": group.get("display_name", group_type),
             "INCLUDE_IN_NOTIFICATION": group.get("include_in_notification", True),
             "INCLUDE_IN_HTML": group.get("include_in_html", True),
+            "INCLUDE_IN_MAIN_REPORT": report_cfg.get(
+                "include_in_main_report",
+                group.get("include_in_main_report", defaults.get("include_in_main_report", True)),
+            ),
             "SOURCE_KINDS": group.get("source_kinds", ["kol", "media"]) or ["kol", "media"],
             "DEDUP": {
                 "ENABLED": dedup.get("enabled", True),
@@ -383,11 +396,53 @@ def _load_industry_analysis_config(config_data: Dict) -> Dict:
                 "MAX_KOL_ITEMS": int(ai_cfg.get("max_kol_items", 50) or 50),
                 "MAX_MEDIA_ITEMS": int(ai_cfg.get("max_media_items", 30) or 30),
             },
+            "NOTIFICATION": {
+                "ENABLED": notification_cfg.get("enabled", True),
+                "SEND_STANDALONE_REPORT": notification_cfg.get(
+                    "send_standalone_report",
+                    defaults.get("send_standalone_report", False),
+                ),
+                "FEISHU": {
+                    "WEBHOOK_URL": feishu_cfg.get("webhook_url", ""),
+                },
+            },
+            "REPORT": {
+                "STANDALONE_HTML": report_cfg.get(
+                    "standalone_html",
+                    defaults.get("standalone_html", True),
+                ),
+                "SUMMARY": {
+                    "MAX_SECTIONS": int(summary_cfg.get("max_sections", default_summary.get("max_sections", 3)) or 3),
+                    "MAX_LINES_PER_SECTION": int(summary_cfg.get("max_lines_per_section", default_summary.get("max_lines_per_section", 1)) or 1),
+                },
+                "SECTION_STRATEGY": {
+                    "MIN_SECTIONS": int(section_strategy.get("min_sections", default_section_strategy.get("min_sections", 3)) or 3),
+                    "MAX_SECTIONS": int(section_strategy.get("max_sections", default_section_strategy.get("max_sections", 6)) or 6),
+                    "PREFERRED_REFS_PER_SECTION": int(section_strategy.get("preferred_refs_per_section", default_section_strategy.get("preferred_refs_per_section", 5)) or 5),
+                    "MIN_REFS_PER_SECTION": int(section_strategy.get("min_refs_per_section", default_section_strategy.get("min_refs_per_section", 3)) or 3),
+                    "MAX_REFS_PER_SECTION": int(section_strategy.get("max_refs_per_section", default_section_strategy.get("max_refs_per_section", 8)) or 8),
+                    "PREFER_FEED_TAGS": section_strategy.get("prefer_feed_tags", default_section_strategy.get("prefer_feed_tags", True)),
+                    "MERGE_SIMILAR_TAGS": section_strategy.get("merge_similar_tags", default_section_strategy.get("merge_similar_tags", True)),
+                    "INCLUDE_KOL_MEDIA_DIVERGENCE": section_strategy.get("include_kol_media_divergence", default_section_strategy.get("include_kol_media_divergence", True)),
+                    "FORCE_KOL_MEDIA_DIVERGENCE": section_strategy.get("force_kol_media_divergence", default_section_strategy.get("force_kol_media_divergence", False)),
+                    "INCLUDE_FINAL_SUMMARY": section_strategy.get("include_final_summary", default_section_strategy.get("include_final_summary", True)),
+                },
+                "TAG_TAXONOMY": {
+                    str(key).strip(): str(value).strip()
+                    for key, value in tag_taxonomy.items()
+                    if str(key).strip() and str(value).strip()
+                },
+            },
         })
 
     return {
         "ENABLED": industry_config.get("enabled", False),
         "OUTPUT_LANGUAGE": industry_config.get("output_language", "zh-CN"),
+        "DEFAULTS": {
+            "INCLUDE_IN_MAIN_REPORT": defaults.get("include_in_main_report", True),
+            "SEND_STANDALONE_REPORT": defaults.get("send_standalone_report", False),
+            "STANDALONE_HTML": defaults.get("standalone_html", True),
+        },
         "GROUPS": normalized_groups,
     }
 

@@ -148,6 +148,7 @@ def split_content_into_batches(
     display_mode: str = "keyword",
     ai_content: Optional[str] = None,
     industry_content: Optional[str] = None,
+    industry_summary_content: Optional[str] = None,
     standalone_data: Optional[Dict] = None,
     rank_threshold: int = 10,
     ai_stats: Optional[Dict] = None,
@@ -815,8 +816,8 @@ def split_content_into_batches(
         return current_batch, current_batch_has_content, batches
 
     def process_industry_section(current_batch, current_batch_has_content, batches, add_separator=True):
-        nonlocal industry_content
-        if not industry_content:
+        content = industry_summary_content if industry_summary_content is not None else industry_content
+        if not content:
             return current_batch, current_batch_has_content, batches
 
         separator = ""
@@ -830,7 +831,7 @@ def split_content_into_batches(
             else:
                 separator = "\n\n"
 
-        test_content = current_batch + separator + industry_content
+        test_content = current_batch + separator + content
         if len(test_content.encode("utf-8")) + len(base_footer.encode("utf-8")) < max_bytes:
             current_batch = test_content
             current_batch_has_content = True
@@ -838,7 +839,7 @@ def split_content_into_batches(
             if current_batch_has_content:
                 _safe_append_batch(batches, current_batch, base_footer, max_bytes, base_header)
             current_batch = _safe_new_batch(
-                base_header + industry_content, base_footer, max_bytes, base_header, batches
+                base_header + content, base_footer, max_bytes, base_header, batches
             )
             current_batch_has_content = True
 

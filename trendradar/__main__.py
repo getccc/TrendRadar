@@ -1037,13 +1037,19 @@ class NewsAnalyzer:
                 standalone_data=standalone_data,
                 skip_translation=True,
             )
+            standalone_industry_results = dispatcher.dispatch_industry_feishu_standalone(
+                industry_analysis=industry_results,
+                report_type=report_type,
+                proxy_url=self.proxy_url,
+                mode=mode,
+            )
 
-            if not results:
+            if not results and not standalone_industry_results:
                 print("未配置任何通知渠道，跳过通知发送")
                 return False
 
             # 记录推送成功
-            if any(results.values()):
+            if any(results.values()) or any(standalone_industry_results.values()):
                 if schedule.once_push and schedule.period_key:
                     scheduler = self.ctx.create_scheduler()
                     date_str = self.ctx.format_date()

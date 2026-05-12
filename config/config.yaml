@@ -275,12 +275,37 @@ industry_analysis:
   enabled: false
   output_language: "zh-CN"
 
+  # 全局默认配置（可被 groups 内单独覆盖）
+  defaults:
+    include_in_main_report: true      # 是否将行业摘要版嵌入主报告
+    send_standalone_report: false     # 是否默认发送行业独立完整版
+    standalone_html: true             # 是否默认生成行业完整版 HTML（当前主要供后续扩展）
+
+    # 行业完整版 section 生成策略
+    section_strategy:
+      min_sections: 3                 # 最少 section 数量
+      max_sections: 6                 # 最多 section 数量
+      preferred_refs_per_section: 5   # 每个 section 理想引用条数
+      min_refs_per_section: 3         # 每个 section 最少引用条数（样本不足时允许更少）
+      max_refs_per_section: 8         # 每个 section 最多引用条数
+      prefer_feed_tags: true          # 优先使用 rss.feeds[].tags 作为板块骨架
+      merge_similar_tags: true        # 允许 AI 合并相近 tags 板块
+      include_kol_media_divergence: true   # 允许输出“KOL / 媒体分歧”特殊板块
+      force_kol_media_divergence: false    # 不强制每次都输出该特殊板块
+      include_final_summary: true     # 最后输出 AI 总总结
+
+    # 主报告里的行业摘要版配置
+    summary:
+      max_sections: 3                 # 主报告中每个行业最多展示 3 个板块
+      max_lines_per_section: 1        # 每个板块只展示 1 行摘要
+
   groups:
     - type: "crypto"
       enabled: false
       display_name: "加密货币行业"
       include_in_notification: true
       include_in_html: true
+      include_in_main_report: true
       source_kinds: ["kol", "media"]
 
       dedup:
@@ -295,6 +320,44 @@ industry_analysis:
         consensus_detection: true
         fresh_signal_detection: true
         kol_media_divergence: true
+
+      # 行业独立通知配置：主报告里只放摘要版，完整版本可单独发到行业群
+      notification:
+        enabled: true
+        send_standalone_report: false
+        feishu:
+          webhook_url: ""            # 行业独立完整版 Feishu webhook
+
+      report:
+        include_in_main_report: true
+        standalone_html: true
+
+        summary:
+          max_sections: 3
+          max_lines_per_section: 1
+
+        section_strategy:
+          min_sections: 3
+          max_sections: 6
+          preferred_refs_per_section: 5
+          min_refs_per_section: 3
+          max_refs_per_section: 8
+          prefer_feed_tags: true
+          merge_similar_tags: true
+          include_kol_media_divergence: true
+          force_kol_media_divergence: false
+          include_final_summary: true
+
+        # tag_taxonomy 用于把零散 tags 收敛为更稳定的候选板块域
+        # 左侧 = rss.feeds[].tags 里出现的标签
+        # 右侧 = 候选板块名（AI 会在此基础上进一步归并、命名、排序）
+        tag_taxonomy:
+          policy: "政策监管"
+          regulation: "政策监管"
+          exchange: "交易所动态"
+          funding: "融资与资本"
+          btc: "BTC主线"
+          etf: "ETF与机构资金"
 
       ai:
         enabled: true

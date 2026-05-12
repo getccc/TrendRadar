@@ -64,6 +64,17 @@ def _render_industry_analysis(industry_analysis: Any, channel: str) -> str:
         return ""
 
 
+def _render_industry_summary(industry_analysis: Any, channel: str) -> str:
+    if not industry_analysis:
+        return ""
+
+    try:
+        from trendradar.ai.formatter import render_industry_summary_markdown
+        return render_industry_summary_markdown(industry_analysis)
+    except ImportError:
+        return ""
+
+
 # === SMTP 邮件配置 ===
 SMTP_CONFIGS = {
     # Gmail（使用 STARTTLS）
@@ -160,8 +171,10 @@ def send_to_feishu(
                 "rss_count": getattr(ai_analysis, "rss_count", 0),
                 "ai_mode": getattr(ai_analysis, "ai_mode", ""),
             }
+    industry_summary_content = None
     if industry_analysis:
         industry_content = _render_industry_analysis(industry_analysis, "feishu")
+        industry_summary_content = _render_industry_summary(industry_analysis, "feishu")
 
     # 预留批次头部空间，避免添加头部后超限
     header_reserve = get_max_batch_header_size("feishu")
@@ -175,6 +188,7 @@ def send_to_feishu(
         rss_new_items=rss_new_items,
         ai_content=ai_content,
         industry_content=industry_content,
+        industry_summary_content=industry_summary_content,
         standalone_data=standalone_data,
         ai_stats=ai_stats,
         report_type=report_type,
